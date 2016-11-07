@@ -1,0 +1,45 @@
+1. A test case I want you try for your wp/sp implementation of the mini-project
+
+Prog: if (x < 5) x := x+1;
+
+Check if WP(Prog, x>10) is equivalent to the formula (x>10)
+Check if SP(Prog, x>=5) is equivalent to the formula (x>=5)
+
+Even if the wp/sp you derive is not identical to the formula given above, you should be able to prove
+equivalence by a call to SMT.
+
+2. If you implementation doesn't pass the above test, explain what is wrong with your implementation.  Fix it, if required.
+
+3. Formula simplification
+
+Modify your program to implement the following simplification.  In the following --> denotes "can be simplied to"
+
+a. If ph1 is TRUE ph1 && ph2 --> ph2  (Similarly, ph1 || ph2 --> TRUE)
+b. If ph1 is FALSE PH1 && ph2 --> FALSE (Similarly, ph1 || ph2 --> ph2)
+
+Or, more generally:
+
+c. If ph1 => ph2, then ph1 && ph2 --> ph1 (Similarly, ph1 || ph2 --> ph2)
+
+Since each simplification check involves a call to SMT, it has to be applied judiciously.  What would be a good strategy
+for implementing such a logical simplifier in implementing wp-sp?
+
+4. Test cases after you implement both SP and WP
+
+a. WP(Prog, TRUE) <=> TRUE
+
+b. WP(Prog, FALSE) <=> FALSE
+
+c. SP(Prog, FALSE) <=> FALSE
+
+d. SP(Prog, WP(Prog, phi)) <=> phi
+
+e. WP(Prog, SP(Prog, phi)) <=> phi
+
+Do (d) and (e) always hold?
+
+
+
+
+
+
