@@ -4,6 +4,7 @@ import pycparser as pycp
 import z3
 import sys
 
+
 def gen_smt_expr(ast):
     if isinstance(ast, pycp.c_ast.Constant):
         return ast.value
@@ -38,6 +39,7 @@ def gen_smt_expr(ast):
         elif ast.op == "!=":
             return lexp != rexp
 
+
 def walk_block(body):
     assumptions = []
     prog_path = []
@@ -46,10 +48,12 @@ def walk_block(body):
         if isinstance(e, pycp.c_ast.Decl):
             vars[e.type.declname] = [e.type.type.names, []]
             if "int" in e.type.type.names:
-                vars[e.type.declname][1].append(z3.Int("%s__0_" % e.type.declname))
+                vars[e.type.declname][1].append(
+                    z3.Int("%s__0_" % e.type.declname))
                 vars[e.type.declname].append(vars[e.type.declname][1][-1])
             if "float" in e.type.type.names:
-                vars[e.type.declname][1].append(z3.Real("%s__0_" % e.type.declname))
+                vars[e.type.declname][1].append(
+                    z3.Real("%s__0_" % e.type.declname))
                 vars[e.type.declname].append(vars[e.type.declname][1][-1])
         elif isinstance(e, pycp.c_ast.FuncCall):
             if e.name.name == "__ASSUME":
@@ -63,39 +67,52 @@ def walk_block(body):
         elif isinstance(e, pycp.c_ast.Assignment):
             rexp = gen_smt_expr(e.rvalue)
             if "int" in vars[e.lvalue.name][0]:
-                vars[e.lvalue.name][1].append(z3.Int("%s__%i_" % (e.lvalue.name, len(vars[e.lvalue.name][1]))))
+                vars[e.lvalue.name][1].append(
+                    z3.Int("%s__%i_" % (e.lvalue.name,
+                                        len(vars[e.lvalue.name][1]))))
             elif "float" in vars[e.lvalue.name][0]:
-                vars[e.lvalue.name][1].append(z3.Real("%s__%i_" % (e.lvalue.name, len(vars[e.lvalue.name][1]))))
+                vars[e.lvalue.name][1].append(
+                    z3.Real("%s__%i_" % (e.lvalue.name,
+                                         len(vars[e.lvalue.name][1]))))
             if e.op == "=":
                 prog_path.append(vars[e.lvalue.name][1][-1] == rexp)
             elif e.op == "+=":
-                prog_path.append(vars[e.lvalue.name][1][-1] == (vars[e.lvalue.name][1][-2] + rexp))
+                prog_path.append(vars[e.lvalue.name][1][-1] ==
+                                 (vars[e.lvalue.name][1][-2] + rexp))
             elif e.op == "-=":
-                prog_path.append(vars[e.lvalue.name][1][-1] == (vars[e.lvalue.name][1][-2] - rexp))
+                prog_path.append(vars[e.lvalue.name][1][-1] ==
+                                 (vars[e.lvalue.name][1][-2] - rexp))
             elif e.op == "*=":
-                prog_path.append(vars[e.lvalue.name][1][-1] == (vars[e.lvalue.name][1][-2] * rexp))
+                prog_path.append(vars[e.lvalue.name][1][-1] ==
+                                 (vars[e.lvalue.name][1][-2] * rexp))
             elif e.op == "%=":
-                prog_path.append(vars[e.lvalue.name][1][-1] == (vars[e.lvalue.name][1][-2] % rexp))
+                prog_path.append(vars[e.lvalue.name][1][-1] ==
+                                 (vars[e.lvalue.name][1][-2] % rexp))
         elif isinstance(e, pycp.c_ast.If):
             cond_exp = gen_smt_expr(e.cond)
-            curr_ix = {key: len(vars[key][1])-1 for key in vars}
+            curr_ix = {key: len(vars[key][1]) - 1 for key in vars}
             bool_exp_true, bool_exp_false = [], []
             if e.iftrue is not None and e.iftrue.block_items is not None:
                 bool_exp_true = walk_block(e.iftrue)
                 for key in curr_ix:
-                    vars[key][1][curr_ix[key]], vars[key][1][-1] = vars[key][1][-1], vars[key][1][curr_ix[key]]
+                    vars[key][1][curr_ix[key]], vars[key][
+                        1][-1] = vars[key][1][-1], vars[key][1][curr_ix[key]]
             if e.iffalse is not None and e.iffalse.block_items is not None:
                 bool_exp_false = walk_block(e.iffalse)
             for key in vars:
                 if curr_ix[key] + 1 == len(vars[key][1]):
                     continue
                 if "int" in vars[key][0]:
-                    vars[key][1].append(z3.Int("%s__%i_" % (key, len(vars[key][1]))))
+                    vars[key][1].append(z3.Int("%s__%i_" %
+                                               (key, len(vars[key][1]))))
                 elif "float" in vars[key][0]:
-                    vars[key][1].append(z3.Real("%s__%i_" % (key, len(vars[key][1]))))
-                bool_exp_true.append(vars[key][1][-1] == vars[key][1][curr_ix[key]])
+                    vars[key][1].append(z3.Real("%s__%i_" %
+                                                (key, len(vars[key][1]))))
+                bool_exp_true.append(
+                    vars[key][1][-1] == vars[key][1][curr_ix[key]])
                 bool_exp_false.append(vars[key][1][-1] == vars[key][1][-2])
-            prog_path.append(z3.If(cond_exp, z3.And(bool_exp_true), z3.And(bool_exp_false)))
+            prog_path.append(z3.If(cond_exp, z3.And(
+                bool_exp_true), z3.And(bool_exp_false)))
 
     li = assumptions + prog_path
     if assertions:
@@ -123,7 +140,7 @@ if __name__ == "__main__":
             main_func = e
             break
 
-    if main_func == None:
+    if main_func is None:
         raise("no main function")
 
     bool_exp = walk_block(main_func.body)
