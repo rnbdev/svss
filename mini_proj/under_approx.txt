@@ -1,0 +1,21 @@
+			       SVSS Mini Project
+			   Under approximation ideas
+
+1. Z3 has inbuilt tactics to under approximate.
+
+	- add-bounds
+		add bounds to unbounded variables (under approximation).
+	- nla2bv
+		convert a nonlinear arithmetic problem into a bit-vector
+	problem, in most cases the resultant goal is an under approximation
+	and is useul for finding models.
+
+	drawbacks
+		- I don't have control over the variables anymore.
+		- I don't know which variable is replaced by which.
+	
+
+2. Under approximate using known constants.
+	
+	under approximate variables with bitvector of size approximately
+same as the constants it has relation with. or similarly adding bounds.
