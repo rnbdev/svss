@@ -13,7 +13,7 @@ t_qe_ = z3.Then(t_qe, t)
 
 def gen_smt_expr(ast):
     if isinstance(ast, pycp.c_ast.Constant):
-        return z3.IntVal(ast.value)
+        return z3.BitVecVal(ast.value, 32)
     elif isinstance(ast, pycp.c_ast.ID):
         return vars[ast.name]
     elif isinstance(ast, pycp.c_ast.UnaryOp):
@@ -64,16 +64,16 @@ def walk_block(node, prev_g=None):
             for e in node.block_items:
                 if isinstance(e, pycp.c_ast.Decl):
                     if "int" in e.type.type.names:
-                        vars[e.name] = z3.Int(e.name)
-                    if "float" in e.type.type.names:
-                        vars[e.name] = z3.Real(e.name)
+                        vars[e.name] = z3.BitVec(e.name, 32)
             for e in reversed(node.block_items):
                 g_next = walk_block(e, g)
                 g = g_next
     elif isinstance(node, pycp.c_ast.FuncCall):
         if node.name.name == "__ASSERT":
+            li = []
             for e_exp in node.args.exprs:
-                g.add(gen_smt_expr(e_exp))
+                li.append(gen_smt_expr(e_exp))
+            g.add(z3.Not(z3.And(li)))
         elif node.name.name == "__ASSUME":
             assumptions = z3.Goal()
             for e_exp in node.args.exprs:
@@ -81,9 +81,10 @@ def walk_block(node, prev_g=None):
             print("solving..")
             print("WP:", g.as_expr())
             print("assume:", assumptions)
-            s.add(z3.Not(assumptions.as_expr()))
+            s.add(assumptions.as_expr())
             s.add(g.as_expr())
             status = s.check()
+            print(s)
 
             if status == z3.sat:
                 model = s.model()
