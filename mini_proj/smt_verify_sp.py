@@ -5,8 +5,8 @@ import z3
 import sys
 
 t_qe = z3.Tactic('qe')
-t = z3.Repeat(z3.Then("simplify", "propagate-ineqs", "propagate-values",
-                      "unit-subsume-simplify",
+t = z3.Repeat(z3.Then("simplify", "propagate-ineqs",
+                      "propagate-values", "unit-subsume-simplify",
                       z3.OrElse("split-clause", "skip")))
 t_qe_ = z3.Then(t_qe, t)
 
@@ -82,9 +82,48 @@ def walk_block(node, prev_g=None, cond=True):
             print("SP:", g.as_expr())
             print("assert:", assertions)
 
-            s.add(z3.Not(assertions.as_expr()))
-            s.add(g.as_expr())
+            seen = set()
+
+            def bv_length(e):
+                li = [-1]
+                if e in seen:
+                    return -1
+                if (z3.is_bv(e) and
+                        z3.is_const(e) and
+                        e.decl().kind() == z3.Z3_OP_UNINTERPRETED):
+                    li.append(e.size())
+                seen.add(e)
+                if z3.is_app(e):
+                    for ch in e.children():
+                        li.append(bv_length(ch))
+                elif z3.is_quantifier(e):
+                    for ch in e.body().children():
+                        li.append(bv_length(ch))
+                return max(li)
+
+            t = z3.Tactic('nla2bv')
+            s = z3.Then(t, 'default').solver()
+            fml = z3.And(g.as_expr(), z3.Not(assertions.as_expr()))
+            print("solving using bitvector underapproximation..")
+            s.add(fml)
             status = s.check()
+
+            if status == z3.unknown:
+                print("returned 'unknown'! trying again with bigger bit length..")
+                print("getting highest bit length used in formula..")
+                bv_l = bv_length(t(fml).as_expr())
+                print("highest bit length used:", bv_l)
+
+                while True:
+                    bv_l += 1
+                    print("trying with bit length:", bv_l)
+                    s = z3.Then(z3.With('nla2bv', nla2bv_bv_size=bv_l),
+                                'default').solver()
+                    s.add(fml)
+                    status = s.check()
+
+                    if status != z3.unknown or bv_l >= 64:
+                        break
 
             if status == z3.sat:
                 model = s.model()
@@ -137,7 +176,7 @@ def walk_block(node, prev_g=None, cond=True):
         g = t(g)  # g.simplify()
     else:
         return prev_g
-    print(g.as_expr(), "\n")
+    # print(g.as_expr(), "\n")
     return g
 
 
@@ -159,7 +198,7 @@ if __name__ == "__main__":
             main_func = e
             break
 
-    if main_func == None:
+    if main_func is None:
         raise("no main function")
 
     s = z3.Solver()

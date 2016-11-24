@@ -5,11 +5,11 @@ import z3
 import sys
 import random
 
-t_qe = z3.Tactic('qe')
-t = z3.Repeat(z3.Then("simplify", "propagate-ineqs",
-                      "propagate-values", "unit-subsume-simplify",
-                      z3.OrElse("split-clause", "skip")))
-t_qe_ = z3.Then(t_qe, t)
+t = z3.Repeat(z3.Then("propagate-values", "propagate-ineqs",
+                      "unit-subsume-simplify", "propagate-bv-bounds",
+                      "simplify"))
+t_qe_ = z3.OrElse(z3.Then(z3.TryFor('qe', 1000),
+                          z3.TryFor('qe2', 1000)), 'skip')
 
 
 def gen_smt_expr(ast):
@@ -68,7 +68,9 @@ def walk_block(node, prev_g=None, cond=True):
                 g = g_next
     elif isinstance(node, pycp.c_ast.Decl):
         if "int" in node.type.type.names:
-            vars[node.name] = z3.BitVec(node.name, 32)
+            ts[node.name] = 0
+            vars[node.name] = z3.BitVec("%s!!%d" % (node.name, ts[node.name]),
+                                        32)
     elif isinstance(node, pycp.c_ast.FuncCall):
         if node.name.name == "__ASSUME":
             for e_exp in node.args.exprs:
@@ -83,7 +85,7 @@ def walk_block(node, prev_g=None, cond=True):
 
             fml = z3.And(g.as_expr(), z3.Not(assertions.as_expr()))
 
-            s = z3.Solver()
+            s = z3.SolverFor('bv')
             s.add(fml)
 
             under_approx_info = {}
@@ -105,7 +107,9 @@ def walk_block(node, prev_g=None, cond=True):
                     status = s.check()
                     break
 
+                # print(s)
                 status = s.check(switches)
+                s.pop()
                 if status == z3.unsat:
                     u_core = s.unsat_core()
                     # print(u_core)
@@ -115,14 +119,13 @@ def walk_block(node, prev_g=None, cond=True):
                     var_st = str(e_bool).split('!!')[0]
                     # print(var_st)
                     under_approx_info[var_st][0] += 1
-                    s.pop()
                 elif status == z3.sat:
                     break
                 else:
                     break
 
             if status == z3.sat:
-                print(s)
+                # print(s)
                 model = s.model()
                 print("program is unsafe.\nlisting an unsafe assignments..")
                 for e in vars:
@@ -135,39 +138,63 @@ def walk_block(node, prev_g=None, cond=True):
             print("found a func call")
     elif isinstance(node, pycp.c_ast.Assignment):
         rexp = gen_smt_expr(node.rvalue)
+        ts[node.lvalue.name] += 1
+        old_ = vars[node.lvalue.name]
         if z3.is_bv(vars[node.lvalue.name]):
-            hand_ = z3.BitVec('__hand__', 32)
+            curr_ = z3.BitVec('%s!!%d' %
+                              (node.lvalue.name, ts[node.lvalue.name]), 32)
+        vars[node.lvalue.name] = curr_
         if node.op == "=":
-            g.add(hand_ == rexp)
+            g.add(curr_ == rexp)
         elif node.op == "+=":
-            g.add(hand_ == (vars[node.lvalue.name] + rexp))
+            g.add(curr_ == (old_ + rexp))
         elif node.op == "-=":
-            g.add(hand_ == (vars[node.lvalue.name] - rexp))
+            g.add(curr_ == (old_ - rexp))
         elif node.op == "*=":
-            g.add(hand_ == (vars[node.lvalue.name] * rexp))
+            g.add(curr_ == (old_ * rexp))
         elif node.op == "%=":
-            g.add(hand_ == (vars[node.lvalue.name] % rexp))
+            g.add(curr_ == (old_ % rexp))
         g_ = z3.Goal()
-        g_.add(z3.Exists(vars[node.lvalue.name], g.as_expr()))
-        print(g_)
+        g_.add(z3.Exists(old_, g.as_expr()))
         g_ = t_qe_(g_)
-        g = z3.Goal()
-        g.add(z3.substitute(g_.as_expr(), (hand_, vars[node.lvalue.name])))
+        if not z3.is_quantifier(g_.as_expr()):
+            print("q eliminated: %s" % old_)
+            g = g_
+        # g = z3.Goal()
         # g = g.simplify()
     elif isinstance(node, pycp.c_ast.If):
         cond_exp = gen_smt_expr(node.cond)
+        vars_ = {}
+        for e in vars:
+            vars_[e] = vars[e]
         if node.iftrue is not None:
             true_expr = walk_block(node.iftrue, g, cond_exp).as_expr()
         else:
             true_expr = z3.And(cond_exp, g.as_expr())
+        vars_t = {}
+        for e in vars:
+            vars_t[e] = vars[e]
+            vars[e] = vars_[e]
         if node.iffalse is not None:
             false_expr = walk_block(
                 node.iffalse, g, z3.Not(cond_exp)).as_expr()
         else:
             false_expr = z3.And(z3.Not(cond_exp), g.as_expr())
+        g_t = z3.Goal()
+        g_f = z3.Goal()
+        g_t.add(true_expr)
+        g_f.add(false_expr)
+        for e in vars:
+            if not vars[e].eq(vars_t[e]):
+                ts[e] += 1
+                new_ = z3.BitVec('%s!!%s' % (e, ts[e]), 32)
+                g_t.add(new_ == vars_t[e])
+                g_f.add(new_ == vars[e])
+                vars[e] = new_
         g = z3.Goal()
-        g.add(z3.Or(true_expr, false_expr))
-        # g = t(g)  # g.simplify()
+        g.add(z3.Or(g_t.as_expr(), g_f.as_expr()))
+        # print(g)
+        g = t(g)  # g.simplify()
     else:
         return prev_g
     # print(g.as_expr(), "\n")
@@ -184,6 +211,7 @@ if __name__ == "__main__":
     # ast.show()
 
     vars = {}
+    ts = {}
 
     main_func = None
 

@@ -6,8 +6,7 @@ import sys
 
 t_qe = z3.Tactic('qe')
 t = z3.Repeat(z3.Then("simplify", "propagate-ineqs", "propagate-values",
-                      "unit-subsume-simplify",
-                      z3.OrElse("split-clause", "skip")))
+                      "unit-subsume-simplify"))
 t_qe_ = z3.Then(t_qe, t)
 
 
@@ -90,7 +89,7 @@ def walk_block(node, prev_g=None):
                 model = s.model()
                 print("program is unsafe.\nlisting an unsafe assignments..")
                 for e in vars:
-                    print(e, ':', model[vars[e]])
+                    print(e, ':', model[vars[e]].as_signed_long())
             elif status == z3.unsat:
                 print("program is safe.")
             elif status == z3.unknown:
