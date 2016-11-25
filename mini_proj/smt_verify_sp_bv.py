@@ -8,8 +8,8 @@ import random
 t = z3.Repeat(z3.Then("propagate-values", "propagate-ineqs",
                       "unit-subsume-simplify", "propagate-bv-bounds",
                       "simplify"))
-t_qe_ = z3.OrElse(z3.Then(z3.TryFor('qe', 1000),
-                          z3.TryFor('qe2', 1000)), 'skip')
+t_qe = z3.OrElse(z3.Then(z3.TryFor('qe', 1000),
+                         z3.TryFor('qe2', 1000)), 'skip')
 
 
 def gen_smt_expr(ast):
@@ -105,6 +105,7 @@ def walk_block(node, prev_g=None, cond=True):
 
                 if len(switches) == 0:
                     status = s.check()
+                    s.pop()
                     break
 
                 # print(s)
@@ -116,7 +117,7 @@ def walk_block(node, prev_g=None, cond=True):
                     if len(u_core) == 0:
                         break
                     e_bool = random.choice(u_core)
-                    var_st = str(e_bool).split('!!')[0]
+                    var_st = str(e_bool)[:-8]
                     # print(var_st)
                     under_approx_info[var_st][0] += 1
                 elif status == z3.sat:
@@ -156,7 +157,7 @@ def walk_block(node, prev_g=None, cond=True):
             g.add(curr_ == (old_ % rexp))
         g_ = z3.Goal()
         g_.add(z3.Exists(old_, g.as_expr()))
-        g_ = t_qe_(g_)
+        g_ = t_qe(g_)
         if not z3.is_quantifier(g_.as_expr()):
             print("q eliminated: %s" % old_)
             g = g_
